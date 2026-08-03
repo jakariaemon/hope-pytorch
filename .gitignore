@@ -24,3 +24,7 @@ results/
 runs/
 *.csv
 *.png
+
+# committed result artifacts
+!assets/curve.png
+!assets/*.csv

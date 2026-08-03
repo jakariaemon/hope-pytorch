@@ -66,9 +66,30 @@ The suite gates each phase of the reproduction:
 
 `tests/test_capacity.py::TestD` compares kernel predictions against real activations and needs `HOPE_IMAGENET_DIR` set; it is skipped otherwise.
 
+## Results
+
+ResNet-50, torchvision `IMAGENET1K_V1` weights, ImageNet val top-1 on a fixed 5000 image subset (seed 0), no fine-tuning anywhere. HOPE runs the full prune, merge, evict loop; baselines prune the same filter set globally by their score.
+
+![accuracy vs density](assets/curve.png)
+
+| density | HOPE | L1 in | L1 joint | BN scale |
+|---|---|---|---|---|
+| 1.00 | 0.774 | 0.774 | 0.774 | 0.774 |
+| ~0.86 | 0.684 | 0.002 | 0.002 | 0.003 |
+| ~0.73 | 0.572 | 0.000 | 0.001 | 0.002 |
+| ~0.59 | 0.391 | 0.002 | 0.001 | 0.001 |
+| ~0.45 | 0.228 | 0.001 | 0.002 | 0.001 |
+| 0.30 | 0.059 | 0.001 | 0.001 | 0.001 |
+
+HOPE checkpoints land on action boundaries, so its densities differ slightly from the baseline grid; each row reports the nearest recorded point (full data in `assets/*.csv`). The magnitude baselines collapse to chance after removing 5 to 10 percent of filters, the scale-symmetry failure the paper predicts: a global magnitude ranking concentrates removals in low-scale layers regardless of function. HOPE degrades gracefully, which satisfies the reproduction gate (HOPE above both baselines at every density at or below 0.7) by three orders of magnitude. Encoding to density 0.3 took 9 seconds on an Apple Silicon CPU, peak rss 1.8 GB.
+
 ## Measured findings
 
 Numbers from this implementation, torchvision `IMAGENET1K_V1` weights unless noted.
+
+**Gaussian surrogate reality check** (Test D, one real batch of 64 val images): median per-channel relative error between predicted `E[relu(y)^2]` and empirical is 0.185, p90 0.472, over 7616 channels. The 59 channels flagged with |beta/gamma| above 2 are the most accurate (median 0.026). This is the honest cost of the max entropy surrogate on real activations.
+
+**Lemma C.3 audit** on the real sweep: merges are rare on these weights (1 of 686 actions to density 0.3); the executed merge held the capacity bound at all 20 path steps, minimum margin 0.013.
 
 **Zero-bias cross-kernel validity.** The paper approximates the cross-kernel by dropping biases (eq 5). Worst error against the exact biased kernel (eq 83), normalized by sqrt(Kii*Kjj):
 
@@ -78,9 +99,7 @@ Numbers from this implementation, torchvision `IMAGENET1K_V1` weights unless not
 
 The approximation is exact at zero bias and as correlation approaches 1, which is where the greedy optimizer operates.
 
-**Encoding ResNet-50 to density 0.3** (no data touched): 686 actions in about 7 seconds on CPU, 678 prunes, 7 block evictions, 1 merge. Block eviction dominates early because its static parameter yield is huge relative to its distortion under the DR criterion (eq 23). The single executed merge passed the Lemma C.3 audit with zero violations along the 20-step path.
-
-Accuracy vs density curves require an ImageNet validation set and will be added once run.
+**Encoding ResNet-50 to density 0.3** (no data touched): 686 actions, 678 prunes, 7 block evictions, 1 merge. Block eviction dominates early because its static parameter yield is huge relative to its distortion under the DR criterion (eq 23).
 
 ## Scope and extending
 
