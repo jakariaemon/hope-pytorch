@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite the original paper."
+title: "hope-pytorch: a PyTorch reproduction of HOPE"
+repository-code: "https://github.com/jakariaemon/hope-pytorch"
+license: MIT
+references:
+  - type: article
+    title: "Hilbert Operator for Progressive Encoding (HOPE): A Mathematical Framework for Deconstructing Learned Representations in Deep Networks"
+    authors:
+      - family-names: Mobahi
+        given-names: Hossein
+      - family-names: Bartlett
+        given-names: Peter L.
+    year: 2026
+    url: "https://arxiv.org/abs/2607.21366"
