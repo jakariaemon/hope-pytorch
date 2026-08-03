@@ -91,6 +91,8 @@ Numbers from this implementation, torchvision `IMAGENET1K_V1` weights unless not
 
 **Lemma C.3 audit** on the real sweep: merges are rare on these weights (1 of 686 actions to density 0.3); the executed merge held the capacity bound at all 20 path steps, minimum margin 0.013.
 
+**Exact vs zero-bias kernels.** `--kernel exact` evaluates the full biased cross-kernel (eq 83) for every pair, vectorized through Owen's T, at the same 9 second encode cost. On this checkpoint it produces an identical action sequence and identical accuracy at every density: prune and evict costs use only the self-kernel, which is exact in both modes, and the one borderline merge selected under zero-bias (rho 0.14) is repriced out under exact kernels. Kernel mode is not a factor for trained torchvision weights; it may matter for models with genuinely duplicated features.
+
 **Zero-bias cross-kernel validity.** The paper approximates the cross-kernel by dropping biases (eq 5). Worst error against the exact biased kernel (eq 83), normalized by sqrt(Kii*Kjj):
 
 | beta/gamma | 0.0 | 0.1 | 0.25 | 0.45 | 0.75 | 1.0 | 1.5 |

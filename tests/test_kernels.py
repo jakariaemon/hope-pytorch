@@ -4,7 +4,9 @@ import numpy as np
 import pytest
 
 from hope.kernels import (
+    bvn_cdf,
     cross_kernel_exact,
+    cross_kernel_exact_batch,
     cross_kernel_zero_bias,
     pairwise_warped_correlation,
     relu_interaction,
@@ -133,6 +135,34 @@ class TestB:
         assert np.all(np.diff(rho_hat[order]) > 0)
         assert warped_correlation(1.0, 2.0, 3.0, 1.0, 1.0) == 1.0
         assert warped_correlation(-1.0, 2.0, 3.0, 1.0, 1.0) == -1.0
+
+    def test_bvn_cdf_matches_scipy(self):
+        from scipy.stats import multivariate_normal
+
+        rng = np.random.default_rng(6)
+        for _ in range(300):
+            h, k = rng.uniform(-3, 3, 2)
+            rho = rng.uniform(-0.999, 0.999)
+            ref = multivariate_normal.cdf([h, k], mean=[0, 0], cov=[[1, rho], [rho, 1]])
+            assert bvn_cdf(h, k, rho) == pytest.approx(ref, abs=1e-8)
+        assert bvn_cdf(0.0, 0.0, 0.6) == pytest.approx(0.25 + np.arcsin(0.6) / (2 * np.pi))
+        assert bvn_cdf(0.0, -1.3, -0.4) == pytest.approx(
+            multivariate_normal.cdf([0, -1.3], mean=[0, 0], cov=[[1, -0.4], [-0.4, 1]]), abs=1e-8
+        )
+
+    def test_exact_batch_matches_scalar(self):
+        rng = np.random.default_rng(8)
+        gi = rng.uniform(0.2, 2.0, 500)
+        gj = rng.uniform(0.2, 2.0, 500)
+        bi = rng.uniform(-2.0, 2.0, 500)
+        bj = rng.uniform(-2.0, 2.0, 500)
+        rho = rng.uniform(-1.0, 1.0, 500)
+        rho[:5] = [1.0, -1.0, 0.0, 1.0 - 1e-12, -1.0 + 1e-12]
+        gi[5:8] = 0.0
+        batch = cross_kernel_exact_batch(gi, bi, gj, bj, rho)
+        for idx in range(500):
+            ref = cross_kernel_exact(gi[idx], bi[idx], gj[idx], bj[idx], rho[idx])
+            assert batch[idx] == pytest.approx(ref, rel=1e-7, abs=1e-9)
 
     def test_dead_neuron_limits(self):
         assert relu_mean(0.0, 0.7) == pytest.approx(0.7)

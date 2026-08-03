@@ -5,7 +5,7 @@ import numpy as np
 from .costs import E_REM_FLOOR, j_merge, j_prune
 from .kernels import (
     TINY,
-    cross_kernel_exact,
+    cross_kernel_exact_batch,
     pairwise_warped_correlation,
     relu_interaction,
     self_kernel,
@@ -44,12 +44,7 @@ class LayerCache:
     def _cross_batch(self, gamma_u, beta_u, gamma_k, beta_k, corr, k_uu, k_kk):
         if self.kernel_mode == "zero_bias":
             return relu_interaction(corr) * np.sqrt(np.maximum(k_uu * k_kk, 0.0))
-        return np.array(
-            [
-                cross_kernel_exact(gu, bu, gk, bk, r)
-                for gu, bu, gk, bk, r in zip(gamma_u, beta_u, gamma_k, beta_k, corr)
-            ]
-        )
+        return cross_kernel_exact_batch(gamma_u, beta_u, gamma_k, beta_k, corr)
 
     def _objective_batch(self, c1, c2, ii, jj, o11, o12, o22):
         surr = self.surrogate

@@ -1,7 +1,7 @@
 """Closed-form ReLU kernels under the Gaussian surrogate. Paper App E."""
 
 import numpy as np
-from scipy.special import ndtr
+from scipy.special import ndtr, owens_t
 from scipy.stats import multivariate_normal
 
 TINY = 1e-12
@@ -106,6 +106,60 @@ def cross_kernel_exact(gamma_i, beta_i, gamma_j, beta_j, rho_hat):
     cdf2 = multivariate_normal.cdf([ci, cj], mean=[0.0, 0.0], cov=[[1.0, r], [r, 1.0]])
     inner = (ci * cj + r) * cdf2 + ci * _phi(cj) * ndtr(cij) + cj * _phi(ci) * ndtr(cji) + s2 * phi2
     return gi * gj * inner
+
+
+def bvn_cdf(h, k, rho):
+    """Standard bivariate normal P(X <= h, Y <= k) via Owen's T, vectorized."""
+    h, k, rho = np.broadcast_arrays(
+        np.asarray(h, dtype=np.float64), np.asarray(k, dtype=np.float64), np.asarray(rho, dtype=np.float64)
+    )
+    h = np.where(np.abs(h) < 1e-9, 1e-9, h)
+    k = np.where(np.abs(k) < 1e-9, 1e-9, k)
+    rho = np.clip(rho, -1.0 + 1e-12, 1.0 - 1e-12)
+    s = np.sqrt(1.0 - rho * rho)
+    a_h = (k - rho * h) / (h * s)
+    a_k = (h - rho * k) / (k * s)
+    beta = np.where(h * k < 0, 0.5, 0.0)
+    return 0.5 * (ndtr(h) + ndtr(k)) - owens_t(h, a_h) - owens_t(k, a_k) - beta
+
+
+def cross_kernel_exact_batch(gamma_i, beta_i, gamma_j, beta_j, rho_hat):
+    """Vectorized exact biased cross-kernel, eq (83), with degenerate and dead limits."""
+    gi, gj, bi, bj, r = np.broadcast_arrays(
+        np.abs(np.asarray(gamma_i, dtype=np.float64)),
+        np.abs(np.asarray(gamma_j, dtype=np.float64)),
+        np.asarray(beta_i, dtype=np.float64),
+        np.asarray(beta_j, dtype=np.float64),
+        np.clip(np.asarray(rho_hat, dtype=np.float64), -1.0, 1.0),
+    )
+    gis = np.maximum(gi, TINY)
+    gjs = np.maximum(gj, TINY)
+    ci, cj = bi / gis, bj / gjs
+
+    rm = np.clip(r, -DEGENERATE_RHO, DEGENERATE_RHO)
+    s2 = 1.0 - rm * rm
+    s = np.sqrt(s2)
+    cij = (ci - rm * cj) / s
+    cji = (cj - rm * ci) / s
+    phi2 = np.exp(-(ci * ci - 2.0 * rm * ci * cj + cj * cj) / (2.0 * s2)) / (2.0 * np.pi * s)
+    main = gi * gj * (
+        (ci * cj + rm) * bvn_cdf(ci, cj, rm)
+        + ci * _phi(cj) * ndtr(cij)
+        + cj * _phi(ci) * ndtr(cji)
+        + s2 * phi2
+    )
+
+    m = np.maximum(-ci, -cj)
+    pos = gi * gj * (ndtr(-m) + m * _phi(m)) + (gi * bj + gj * bi) * _phi(m) + bi * bj * ndtr(-m)
+    lo, hi = -ci, cj
+    e0 = ndtr(hi) - ndtr(lo)
+    e1 = _phi(lo) - _phi(hi)
+    e2 = (ndtr(hi) - hi * _phi(hi)) - (ndtr(lo) - lo * _phi(lo))
+    neg = np.where(hi > lo, -gi * gj * e2 + (gi * bj - gj * bi) * e1 + bi * bj * e0, 0.0)
+
+    out = np.where(r >= DEGENERATE_RHO, pos, np.where(r <= -DEGENERATE_RHO, neg, main))
+    dead = (gi <= TINY) | (gj <= TINY)
+    return np.where(dead, relu_mean(gi, bi) * relu_mean(gj, bj), out)
 
 
 def cross_kernel(gamma_i, beta_i, gamma_j, beta_j, rho_hat, k_ii=None, k_jj=None, mode="zero_bias"):

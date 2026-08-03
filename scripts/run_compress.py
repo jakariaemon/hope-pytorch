@@ -129,12 +129,13 @@ def main():
 
     rows = []
     encode_time = 0.0
+    label = args.method if args.kernel == "zero_bias" else f"{args.method}_{args.kernel}"
 
     def record():
         acc = evaluate(model, loader, device) if loader else float("nan")
         rows.append(
             {
-                "method": args.method,
+                "method": label,
                 "density": round(enc.density, 6),
                 "top1": acc,
                 "params": n_params(model),
