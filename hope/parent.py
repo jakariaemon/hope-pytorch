@@ -28,6 +28,8 @@ class Parent:
     a: float
     b_scalar: float
     rho_hat: float
+    corr_i: float
+    corr_j: float
     active: bool
 
     @property
@@ -129,6 +131,9 @@ def synthesize_parent(layer, i, j, rho_hat_ij, e_layer, kernel_mode="zero_bias",
     else:
         obj = obj_pos
     _, k_uu, k_ui, k_uj, z_norm = obj
+    _, _, corr_i, corr_j = _mixture_stats(
+        q[0], q[1], ni["gamma"], ni["beta"], nj["gamma"], nj["beta"], rho_hat_ij
+    )
 
     a = float(cap_i**2 + cap_j**2)
     b_scalar = z_norm / np.sqrt(k_uu) if k_uu > TINY else 0.0
@@ -183,6 +188,8 @@ def synthesize_parent(layer, i, j, rho_hat_ij, e_layer, kernel_mode="zero_bias",
         a=a,
         b_scalar=float(b_scalar),
         rho_hat=rho_hat_ij,
+        corr_i=float(corr_i),
+        corr_j=float(corr_j),
         active=active,
     )
 
