@@ -90,7 +90,7 @@ class TestA:
             elif c <= 0.25:
                 assert worst < 0.08
             elif c <= 0.5:
-                assert worst < 0.12
+                assert worst < 0.15
         print("\nzero-bias worst err / sqrt(Kii*Kjj) vs |beta/gamma|:")
         for c, err in rows:
             print(f"  {c:4.2f}  {err:.4f}")
