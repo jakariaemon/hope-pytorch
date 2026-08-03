@@ -28,3 +28,5 @@ runs/
 # committed result artifacts
 !assets/curve.png
 !assets/*.csv
+*_plan.md
+*_PLAN.md
