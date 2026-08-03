@@ -36,6 +36,7 @@ class LayerSurrogate:
     gamma: np.ndarray  # (N,) BN scale, |gamma| is the marginal std
     beta: np.ndarray  # (N,) BN shift, the marginal mean
     w_out: np.ndarray  # (N, d_out)
+    activation: str = "relu"
 
     def __post_init__(self):
         self.w_eff = np.atleast_2d(np.asarray(self.w_eff, dtype=np.float64))
@@ -54,6 +55,6 @@ class LayerSurrogate:
         return np.concatenate([self.w_eff, self.b[:, None]], axis=1)
 
     @classmethod
-    def from_bn(cls, w_raw, gamma, beta, mu, var, w_out, eps=BN_EPS):
+    def from_bn(cls, w_raw, gamma, beta, mu, var, w_out, eps=BN_EPS, activation="relu"):
         w_eff, b_eff = effective_params(w_raw, gamma, beta, mu, var, eps)
-        return cls(w_eff=w_eff, b=b_eff, gamma=gamma, beta=beta, w_out=w_out)
+        return cls(w_eff=w_eff, b=b_eff, gamma=gamma, beta=beta, w_out=w_out, activation=activation)

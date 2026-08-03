@@ -3,7 +3,7 @@
 import numpy as np
 
 from .costs import E_REM_FLOOR
-from .kernels import cross_kernel, self_kernel
+from .parent import cross_scalar
 
 
 def audit_merge_path(cache, i, j, parent, steps=20):
@@ -14,21 +14,20 @@ def audit_merge_path(cache, i, j, parent, steps=20):
     e_terminal = e_rem_pair + s
 
     surr = cache.surrogate
-    k_pp = float(self_kernel(parent.gamma, parent.beta))
+    k_pp = float(cache.act.self_kernel(parent.gamma, parent.beta))
     inner = {}
     for name, k in (("i", i), ("j", j)):
         corr = parent.corr_i if name == "i" else parent.corr_j
-        k_pk = float(
-            cross_kernel(
-                parent.gamma,
-                parent.beta,
-                surr.gamma[k],
-                surr.beta[k],
-                corr,
-                k_pp,
-                cache.k_ii[k],
-                cache.kernel_mode,
-            )
+        k_pk = cross_scalar(
+            cache.act,
+            cache.kernel_mode,
+            parent.gamma,
+            parent.beta,
+            surr.gamma[k],
+            surr.beta[k],
+            corr,
+            k_pp,
+            cache.k_ii[k],
         )
         inner[name] = k_pk * float(surr.w_out[k] @ parent.w_out)
 

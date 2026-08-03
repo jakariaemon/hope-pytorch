@@ -2,31 +2,26 @@
 
 import numpy as np
 
+from .activations import get_kernels
 from .costs import E_REM_FLOOR, j_merge, j_prune
-from .kernels import (
-    TINY,
-    cross_kernel_exact_batch,
-    pairwise_warped_correlation,
-    relu_interaction,
-    self_kernel,
-    warped_correlation,
-)
+from .kernels import TINY, pairwise_warped_correlation, warped_correlation
 from .parent import synthesize_parent
 
 
 class LayerCache:
     """Per-layer pair geometry cache; costs are O(1) scalar arithmetic at scan time."""
 
-    def __init__(self, surrogate, kernel_mode="zero_bias"):
+    def __init__(self, surrogate, kernel_mode="zero_bias", pair_dtype=None):
         self.surrogate = surrogate
         self.kernel_mode = kernel_mode
+        self.act = get_kernels(surrogate.activation)
         n = surrogate.n
         self.active = np.ones(n, dtype=bool)
         w_aug = surrogate.w_aug
         self.g = w_aug @ w_aug.T
         self.o = surrogate.w_out @ surrogate.w_out.T
         self.rho_hat = pairwise_warped_correlation(surrogate.w_eff, surrogate.gamma)
-        self.k_ii = self_kernel(surrogate.gamma, surrogate.beta)
+        self.k_ii = self.act.self_kernel(surrogate.gamma, surrogate.beta)
         self.caps = np.sqrt(np.maximum(np.diag(self.o) * self.k_ii, 0.0))
         self.e_init = float(self.caps.sum())
         self.e_rem = self.e_init
@@ -36,6 +31,9 @@ class LayerCache:
             b = self._pair_b(ii, jj)
             self.b_mat[ii, jj] = b
             self.b_mat[jj, ii] = b
+        if pair_dtype is not None:
+            for name in ("g", "o", "rho_hat", "b_mat"):
+                setattr(self, name, getattr(self, name).astype(pair_dtype))
 
     @property
     def n_live(self):
@@ -43,8 +41,8 @@ class LayerCache:
 
     def _cross_batch(self, gamma_u, beta_u, gamma_k, beta_k, corr, k_uu, k_kk):
         if self.kernel_mode == "zero_bias":
-            return relu_interaction(corr) * np.sqrt(np.maximum(k_uu * k_kk, 0.0))
-        return cross_kernel_exact_batch(gamma_u, beta_u, gamma_k, beta_k, corr)
+            return self.act.interaction(corr) * np.sqrt(np.maximum(k_uu * k_kk, 0.0))
+        return self.act.cross_exact(gamma_u, beta_u, gamma_k, beta_k, corr)
 
     def _objective_batch(self, c1, c2, ii, jj, o11, o12, o22):
         surr = self.surrogate
@@ -63,7 +61,7 @@ class LayerCache:
         corr_uj = np.clip(
             (c2 * gj2 + c1 * cov_ij) / np.maximum(gamma_u * gj, TINY), -1.0, 1.0
         )
-        k_uu = self_kernel(gamma_u, beta_u)
+        k_uu = self.act.self_kernel(gamma_u, beta_u)
         k_ui = self._cross_batch(gamma_u, beta_u, gi, surr.beta[ii], corr_ui, k_uu, self.k_ii[ii])
         k_uj = self._cross_batch(gamma_u, beta_u, gj, surr.beta[jj], corr_uj, k_uu, self.k_ii[jj])
         z2 = k_ui * k_ui * o11 + 2 * k_ui * k_uj * o12 + k_uj * k_uj * o22
@@ -161,7 +159,7 @@ class LayerCache:
         self.g[:, i] = self.g[i, :]
         self.o[i, :] = surr.w_out @ surr.w_out[i]
         self.o[:, i] = self.o[i, :]
-        self.k_ii[i] = self_kernel(parent.gamma, parent.beta)
+        self.k_ii[i] = self.act.self_kernel(parent.gamma, parent.beta)
         self.caps[i] = parent.s
 
         norms = np.maximum(np.linalg.norm(surr.w_eff, axis=1), TINY)
