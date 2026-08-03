@@ -1,0 +1,26 @@
+# python
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+
+# editors and os
+.DS_Store
+.idea/
+.vscode/
+
+# paper and planning files, never commit
+*.pdf
+plan.md
+
+# data, weights, outputs
+data/
+checkpoints/
+results/
+runs/
+*.csv
+*.png
