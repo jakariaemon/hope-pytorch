@@ -75,7 +75,7 @@ def main():
     ap.add_argument("--data", required=True, help="ImageNet val directory")
     ap.add_argument("--calib", required=True, help="statistics file from calibrate_vit.py")
     ap.add_argument("--method", default="hope", choices=["hope", "l1_in", "l1_joint"])
-    ap.add_argument("--kernel", default="exact", choices=["zero_bias", "exact"])
+    ap.add_argument("--kernel", default="zero_bias", choices=["zero_bias", "exact"])
     ap.add_argument("--target-density", type=float, default=0.3)
     ap.add_argument("--eval-every", type=float, default=0.05)
     ap.add_argument("--subset", type=int, default=5000)
