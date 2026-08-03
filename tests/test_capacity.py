@@ -1,4 +1,4 @@
-"""Phase 2 gates: scale invariance (Test C) and surrogate reality check (Test D)."""
+"""Phase 2 gates: capacity exactly invariant under PH-1 and BN rescaling where L1 breaks (Test C); kernel predictions vs real activations (Test D)."""
 
 import os
 

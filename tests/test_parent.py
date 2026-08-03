@@ -1,4 +1,4 @@
-"""Phase 3 gates: physical exactness (Test E) and merge fidelity (Test F)."""
+"""Phase 3 gates: y_p = c1*y_i + c2*y_j through a real BatchNorm to float tolerance, gamma sign invariance, lossless twins (Test E); measured vs predicted distortion (Test F)."""
 
 import numpy as np
 import pytest

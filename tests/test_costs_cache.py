@@ -1,4 +1,4 @@
-"""Phase 4 gates: cache vs direct cost agreement (Test G), local updates, Lemma C.3 audit."""
+"""Phase 4 gates: cached scalars equal direct synthesis to 1e-9 (Test G); incremental merge updates match a fresh rebuild; footprints; Lemma C.3 audit."""
 
 import numpy as np
 import pytest

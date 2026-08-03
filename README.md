@@ -2,7 +2,7 @@
 
 PyTorch reproduction of **HOPE: Hilbert Operator for Progressive Encoding** ([arXiv:2607.21366](https://arxiv.org/abs/2607.21366)), a data-free framework for compressing trained networks by pruning, merging, and evicting entire residual blocks under one unified cost.
 
-HOPE never touches a dataset. It lifts each neuron into a Hilbert space using a Gaussian surrogate built from the network's own BatchNorm statistics, then greedily executes the compression action with the lowest distortion per removed parameter. There is no official code release; this implementation is built from the paper's equations, with equation numbers cited throughout the source.
+Each neuron is lifted into a Hilbert space through a Gaussian surrogate built from the network's BatchNorm statistics; compression greedily executes the action with the lowest distortion per removed parameter. There is no official code release; this implementation is built from the paper's equations, with equation numbers cited throughout the source.
 
 ## Install
 
@@ -56,19 +56,11 @@ scripts/         run_compress.py, plot_curve.py, surrogate_check.py
 pytest -q
 ```
 
-The suite gates each phase of the reproduction:
-
-- **Kernels**: closed forms match Monte Carlo (40M samples) to 0.1 percent; Cauchy-Schwarz, diagonal consistency, monotonicity.
-- **Capacity**: exact invariance under PH-1 rescaling and BN weight rescaling, where L1 magnitude scores break.
-- **Parent synthesis**: the deployed parent reproduces `y_p = c1*y_i + c2*y_j` through a real torch BatchNorm to float tolerance, forward pass invariant to the sign of the recovered gamma, and merging identical twins is lossless.
-- **Cache**: batched pair scalars agree with direct per-pair synthesis to 1e-9, and incremental updates after a merge match a cache rebuilt from scratch.
-- **Encoder**: full loop on ResNet-50 with a shape-check forward after every action.
-
-`tests/test_capacity.py::TestD` compares kernel predictions against real activations and needs `HOPE_IMAGENET_DIR` set; it is skipped otherwise.
+The suite verifies the implementation against the paper: kernels against 40M sample Monte Carlo, parent deployment through a real BatchNorm to float tolerance, cache scalars against direct synthesis. Test D needs `HOPE_IMAGENET_DIR` pointing at ImageNet val and skips otherwise.
 
 ## Results
 
-ResNet-50, torchvision `IMAGENET1K_V1` weights, ImageNet val top-1 on a fixed 5000 image subset (seed 0), no fine-tuning anywhere. HOPE runs the full prune, merge, evict loop; baselines prune the same filter set globally by their score.
+ResNet-50, torchvision `IMAGENET1K_V1` weights, ImageNet val top-1 on a fixed 5000 image subset (seed 0), without fine-tuning. HOPE runs the full prune, merge, evict loop; baselines prune the same filter set globally by their score.
 
 ![accuracy vs density](assets/curve.png)
 
@@ -81,17 +73,17 @@ ResNet-50, torchvision `IMAGENET1K_V1` weights, ImageNet val top-1 on a fixed 50
 | ~0.45 | 0.228 | 0.001 | 0.002 | 0.001 |
 | 0.30 | 0.059 | 0.001 | 0.001 | 0.001 |
 
-HOPE checkpoints land on action boundaries, so its densities differ slightly from the baseline grid; each row reports the nearest recorded point (full data in `assets/*.csv`). The magnitude baselines collapse to chance after removing 5 to 10 percent of filters, the scale-symmetry failure the paper predicts: a global magnitude ranking concentrates removals in low-scale layers regardless of function. HOPE degrades gracefully, which satisfies the reproduction gate (HOPE above both baselines at every density at or below 0.7) by three orders of magnitude. Encoding to density 0.3 took 9 seconds on an Apple Silicon CPU, peak rss 1.8 GB.
+HOPE checkpoints land on action boundaries, so densities differ slightly from the baseline grid; each row reports the nearest recorded point (full data in `assets/*.csv`). The magnitude baselines collapse to chance after losing 5 to 10 percent of filters, the scale-symmetry failure the paper predicts. HOPE stays above every baseline at every density. Encoding to density 0.3 took 9 seconds on an Apple Silicon CPU, peak rss 1.8 GB.
 
 ## Measured findings
 
 Numbers from this implementation, torchvision `IMAGENET1K_V1` weights unless noted.
 
-**Gaussian surrogate reality check** (Test D, one real batch of 64 val images): median per-channel relative error between predicted `E[relu(y)^2]` and empirical is 0.185, p90 0.472, over 7616 channels. The 59 channels flagged with |beta/gamma| above 2 are the most accurate (median 0.026). This is the honest cost of the max entropy surrogate on real activations.
+**Gaussian surrogate accuracy** (Test D, one real batch of 64 val images): median per-channel relative error between predicted `E[relu(y)^2]` and empirical is 0.185, p90 0.472, over 7616 channels. The 59 channels flagged with |beta/gamma| above 2 are the most accurate (median 0.026).
 
 **Lemma C.3 audit** on the real sweep: merges are rare on these weights (1 of 686 actions to density 0.3); the executed merge held the capacity bound at all 20 path steps, minimum margin 0.013.
 
-**Exact vs zero-bias kernels.** `--kernel exact` evaluates the full biased cross-kernel (eq 83) for every pair, vectorized through Owen's T, at the same 9 second encode cost. On this checkpoint it produces an identical action sequence and identical accuracy at every density: prune and evict costs use only the self-kernel, which is exact in both modes, and the one borderline merge selected under zero-bias (rho 0.14) is repriced out under exact kernels. Kernel mode is not a factor for trained torchvision weights; it may matter for models with genuinely duplicated features.
+**Exact vs zero-bias kernels.** `--kernel exact` evaluates the full biased cross-kernel (eq 83) for every pair, vectorized through Owen's T, at the same 9 second encode cost. The action sequence and accuracy are identical at every density: prune and evict costs use only the self-kernel, exact in both modes, and the one borderline merge from zero-bias (rho 0.14) is repriced out. Kernel mode may still matter for models with genuinely duplicated features.
 
 **Zero-bias cross-kernel validity.** The paper approximates the cross-kernel by dropping biases (eq 5). Worst error against the exact biased kernel (eq 83), normalized by sqrt(Kii*Kjj):
 
@@ -101,11 +93,11 @@ Numbers from this implementation, torchvision `IMAGENET1K_V1` weights unless not
 
 The approximation is exact at zero bias and as correlation approaches 1, which is where the greedy optimizer operates.
 
-**Encoding ResNet-50 to density 0.3** (no data touched): 686 actions, 678 prunes, 7 block evictions, 1 merge. Block eviction dominates early because its static parameter yield is huge relative to its distortion under the DR criterion (eq 23).
+**Encoding ResNet-50 to density 0.3**: 686 actions, 678 prunes, 7 block evictions, 1 merge. Block eviction dominates early because its static parameter yield is large relative to its distortion under the DR criterion (eq 23).
 
 ## Scope and extending
 
-The core (`hope/`) is architecture agnostic: it operates on per-neuron effective weights, BN parameters, and outgoing weight vectors. Only the adapter is model specific. The included adapter covers torchvision bottleneck ResNets (resnet50, resnet101, resnet152). To add an architecture, provide what `adapters/tp.py` provides: a `LayerSurrogate` per compressible layer, static parameter footprints, and an executor with `prune`, `merge`, and `evict`. Networks without BN can use `surrogate.calibrated_params` after a one-time statistics pass (App E). Natural next targets: VGG-style nets with the non-residual eviction rule (App F.3), BasicBlock ResNets, and Transformer MLP blocks.
+The core (`hope/`) is architecture agnostic: it operates on per-neuron effective weights, BN parameters, and outgoing weight vectors. Only the adapter is model specific; the included one covers torchvision bottleneck ResNets (resnet50, resnet101, resnet152). A new architecture needs a `LayerSurrogate` per compressible layer, static parameter footprints, and an executor with `prune`, `merge`, and `evict`. Networks without BN can use `surrogate.calibrated_params` after a one-time statistics pass (App E). Natural next targets: VGG-style nets with the non-residual eviction rule (App F.3), BasicBlock ResNets, and Transformer MLP blocks.
 
 ## Interpretation choices
 

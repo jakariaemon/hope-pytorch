@@ -1,4 +1,4 @@
-"""Phase 5 gates: greedy loop behavior and physical execution on ResNet-50."""
+"""Phase 5 gates: greedy loop bookkeeping and physical ResNet-50 execution with a shape-check forward after every action."""
 
 import numpy as np
 import pytest

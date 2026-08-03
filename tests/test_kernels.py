@@ -1,4 +1,4 @@
-"""Phase 1 gates: Monte Carlo agreement (Test A) and kernel properties (Test B)."""
+"""Phase 1 gates: kernels match 40M sample Monte Carlo to 0.1 percent (Test A); Cauchy-Schwarz, diagonal consistency, monotonicity, dead limits (Test B)."""
 
 import numpy as np
 import pytest
