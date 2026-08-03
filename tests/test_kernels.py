@@ -8,6 +8,7 @@ from hope.kernels import (
     cross_kernel_zero_bias,
     pairwise_warped_correlation,
     relu_interaction,
+    relu_mean,
     self_kernel,
     warped_correlation,
 )
@@ -132,6 +133,31 @@ class TestB:
         assert np.all(np.diff(rho_hat[order]) > 0)
         assert warped_correlation(1.0, 2.0, 3.0, 1.0, 1.0) == 1.0
         assert warped_correlation(-1.0, 2.0, 3.0, 1.0, 1.0) == -1.0
+
+    def test_dead_neuron_limits(self):
+        assert relu_mean(0.0, 0.7) == pytest.approx(0.7)
+        assert relu_mean(0.0, -0.3) == 0.0
+        assert self_kernel(0.0, 0.7) == pytest.approx(0.49)
+        assert self_kernel(0.0, -0.3) == 0.0
+        expected = 0.5 * relu_mean(1.0, 0.2)
+        assert cross_kernel_exact(0.0, 0.5, 1.0, 0.2, 0.9) == pytest.approx(expected)
+        assert cross_kernel_exact(1.0, 0.2, 0.0, -0.5, 0.3) == 0.0
+        vals = [
+            relu_mean(0.0, 0.0),
+            self_kernel(0.0, 0.0),
+            cross_kernel_exact(0.0, 0.0, 0.0, 0.0, 0.0),
+        ]
+        assert np.all(np.isfinite(vals))
+
+    def test_dead_row_pairwise_correlation(self):
+        rng = np.random.default_rng(4)
+        w = rng.standard_normal((5, 8))
+        w[2] = 0.0
+        rho = pairwise_warped_correlation(w, rng.uniform(0.5, 1.5, 5))
+        assert np.isfinite(rho).all()
+        assert rho[2, 2] == 1.0
+        off = [rho[2, k] for k in range(5) if k != 2]
+        assert np.all(np.asarray(off) == 0.0)
 
     def test_pairwise_matrix(self):
         rng = np.random.default_rng(3)

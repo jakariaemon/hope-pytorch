@@ -99,6 +99,31 @@ class TestCacheUpdates:
         assert cache.n_live == n0 - 1
         assert cache.e_rem == pytest.approx(e0 - cap)
 
+    def test_cache_with_dead_neuron(self):
+        layer = random_layer(seed=50)
+        layer.w_eff[3] = 0.0
+        layer.gamma[3] = 0.0
+        cache = LayerCache(layer)
+        assert np.isfinite(cache.b_mat).all()
+        assert np.isfinite(cache.caps).all()
+        _, jp = cache.prune_costs()
+        _, _, jm, s = cache.merge_costs()
+        assert np.isfinite(jp).all()
+        assert np.isfinite(jm).all()
+        assert np.isfinite(s).all()
+
+    def test_merge_update_with_degenerate_parent(self):
+        cache = LayerCache(random_layer(seed=51))
+        parent = cache.synthesize(0, 1)
+        parent.w_eff = np.zeros_like(parent.w_eff)
+        parent.w_raw = np.zeros_like(parent.w_raw)
+        parent.gamma = 0.0
+        cache.apply_merge(0, 1, parent)
+        assert np.isfinite(cache.rho_hat).all()
+        assert np.isfinite(cache.b_mat).all()
+        others = [k for k in range(cache.surrogate.n) if k != 0 and cache.active[k]]
+        assert np.all(cache.rho_hat[0, others] == 0.0)
+
     def test_clear_floors_capacity(self):
         cache = LayerCache(random_layer())
         cache.clear()

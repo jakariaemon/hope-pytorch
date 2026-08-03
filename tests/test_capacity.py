@@ -7,7 +7,7 @@ import pytest
 
 from hope.capacity import capacity, conv_input_vectors, conv_output_vectors, layer_capacities
 from hope.kernels import self_kernel
-from hope.surrogate import LayerSurrogate, effective_params
+from hope.surrogate import LayerSurrogate
 
 RNG = np.random.default_rng(10)
 
@@ -50,17 +50,19 @@ class TestC:
         w_out = RNG.standard_normal((n, 7))
         eps = 1e-5
 
-        w_eff, b = effective_params(w_raw, gamma, beta, mu, var, eps)
-        caps = capacity(w_out, self_kernel(gamma, beta))
+        layer = LayerSurrogate.from_bn(w_raw, gamma, beta, mu, var, w_out, eps)
+        caps, _ = layer_capacities(layer)
 
         # scaling raw weights by lam with matching BN statistics leaves the function unchanged
         lam = 2.5
         var2 = lam * lam * (var + eps) - eps
-        w_eff2, b2 = effective_params(lam * w_raw, gamma, beta, lam * mu, var2, eps)
-        caps2 = capacity(w_out, self_kernel(gamma, beta))
-        assert np.allclose(w_eff2, w_eff, rtol=1e-9)
-        assert np.allclose(b2, b, rtol=1e-9, atol=1e-12)
+        scaled = LayerSurrogate.from_bn(lam * w_raw, gamma, beta, lam * mu, var2, w_out, eps)
+        caps2, _ = layer_capacities(scaled)
+        assert np.allclose(scaled.w_eff, layer.w_eff, rtol=1e-9)
+        assert np.allclose(scaled.b, layer.b, rtol=1e-9, atol=1e-12)
         assert np.allclose(caps2, caps, rtol=1e-9)
+        l1_raw = np.abs(w_raw).sum(axis=1)
+        assert not np.allclose(np.abs(lam * w_raw).sum(axis=1), l1_raw, rtol=1e-2)
 
     def test_capacity_matches_direct_formula(self):
         layer = random_layer()
