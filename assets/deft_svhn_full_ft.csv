@@ -1,0 +1,4 @@
+method,target,epoch,target_acc,source_acc,h_score,train_seconds
+full_ft,svhn,1,0.946,0.3566,0.518,1568.1
+full_ft,svhn,2,0.9518,0.2812,0.4341,1568.3
+full_ft,svhn,3,0.9566,0.2758,0.4282,1594.8

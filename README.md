@@ -124,6 +124,30 @@ Findings:
 - 2310 merges executed with zero Lemma C.3 violations (rho median 0.69).
 - At density 0.85 the model retains 0.804 of its 0.823 baseline, a better retention ratio than the BN ResNet-50 reproduction at the same density. The curve declines smoothly below 0.80 as the redundancy budget runs out.
 
+## DEFT on pretrained ViT-B/16
+
+Algorithm 3 adapted to the real pretrained ViT: partition MLP hidden units into a frozen core and plastic slack by global capacity percentile P (703 merges at rho above 0.9 free extra vessels), sever nothing across blocks (no direct slack-to-core weights exist in a stream-mediated transformer, so protection comes from exact freezing), fine-tune only the slack and a new head, and evaluate source retention with slack outputs masked and the source head grafted back.
+
+```bash
+python scripts/run_deft_vit.py --method deft --target svhn --percentile 20 --calib vit_calib.npz --imagenet /path/to/imagenet/val
+```
+
+ImageNet source, two targets, 3 epochs, no source data during adaptation. Best H-Score (harmonic mean of target accuracy and source retention) per method:
+
+| method | CIFAR-100 target | SVHN target |
+|---|---|---|
+| DEFT P=20 | not run | **0.848** (0.939 / 0.774) |
+| head only | **0.809** (0.795 / 0.823) | 0.654 (0.542 / 0.823) |
+| full FT | 0.727 (0.862 / 0.629) | 0.518 (0.946 / 0.357, decays each epoch) |
+| DEFT P=40 | 0.487 (0.869 / 0.338) | 0.498 (0.945 / 0.338) |
+
+Findings:
+
+- Theorem H.2 holds bitwise on the real model: after fine-tuning, every core fc1 row and fc2 column is identical to the source weights, and the measured source path is constant to four decimals across every epoch and both targets.
+- The shared fc2 bias is a stream parameter, not a per-unit weight; training it leaks target drift into the source path. It stays frozen, mirroring the paper's own bias handling (App G.2).
+- The stability-plasticity dilemma decides the winner. On the easy target (CIFAR-100) frozen features suffice and head only wins. On the hard target (SVHN) linear probing collapses and full FT forgets catastrophically; DEFT at P=20 matches full FT's target accuracy while retaining 0.774 source, taking first place by a wide margin.
+- The slack fraction P is a retention dial: masking 41 percent of units caps retention at 0.338, masking 21 percent keeps 0.774 at almost no target cost.
+
 ## Scope and extending
 
 The core (`hope/`) is architecture agnostic: it operates on per-neuron effective weights, BN parameters, and outgoing weight vectors. Only the adapter is model specific; the included one covers torchvision bottleneck ResNets (resnet50, resnet101, resnet152). A new architecture needs a `LayerSurrogate` per compressible layer, static parameter footprints, and an executor with `prune`, `merge`, and `evict`. Networks without BN can use `surrogate.calibrated_params` after a one-time statistics pass (App E). Natural next targets: VGG-style nets with the non-residual eviction rule (App F.3), BasicBlock ResNets, and Transformer MLP blocks.

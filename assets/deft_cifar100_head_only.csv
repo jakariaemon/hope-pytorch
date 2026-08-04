@@ -1,0 +1,4 @@
+method,epoch,target_acc,source_acc,h_score,train_seconds
+head_only,1,0.7654,0.823,0.7932,322.9
+head_only,2,0.7858,0.823,0.804,310.8
+head_only,3,0.795,0.823,0.8088,323.9
