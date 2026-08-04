@@ -1,14 +1,12 @@
 # hope-pytorch
 
-PyTorch implementation of **HOPE: Hilbert Operator for Progressive Encoding** ([arXiv:2607.21366](https://arxiv.org/abs/2607.21366)): data-free structured compression of trained networks, built from the paper's equations with equation numbers cited throughout the source. There is no official code release.
+PyTorch implementation of **HOPE: Hilbert Operator for Progressive Encoding** ([arXiv:2607.21366](https://arxiv.org/abs/2607.21366)), a data-free method for structured compression of trained networks. Implemented from the paper alone; equation numbers are cited throughout the source.
 
-Beyond the paper's ReLU + BatchNorm scope, this repo adds GELU + LayerNorm support (new closed-form kernels) and the paper's DEFT elastic fine-tuning, both validated on real pretrained models.
+The paper covers ReLU with BatchNorm. This repo additionally supports GELU with LayerNorm and implements the paper's DEFT fine-tuning method. All results below use pretrained torchvision checkpoints.
 
-Headline results, real pretrained checkpoints, no fine-tuning unless the method is fine-tuning:
-
-- **ResNet-50**: 68.4 percent ImageNet top-1 with 17.5 percent of parameters removed; magnitude baselines collapse to chance. Encoding takes 9 seconds on a laptop CPU.
-- **ViT-B/16**: 80.4 percent top-1 (from 82.3) with 15 percent of MLP units removed, using a 512 image calibration pass instead of BatchNorm statistics.
-- **DEFT on ViT**: first place on both transfer targets (H-Score 0.815 easy, 0.848 hard), with the frozen core bitwise identical to the source weights after fine-tuning.
+- **ResNet-50 compression**: 68.4 percent ImageNet top-1 with 17.5 percent of parameters removed, without fine-tuning. Magnitude baselines drop to chance at the same density.
+- **ViT-B/16 compression**: 80.4 percent top-1, from 82.3, with 15 percent of MLP hidden units removed. A 512 image calibration pass replaces BatchNorm statistics.
+- **DEFT transfer**: highest H-Score on both targets, CIFAR-100 and SVHN. The frozen core is bitwise unchanged after fine-tuning.
 
 ## Install
 
@@ -51,7 +49,7 @@ Evaluation uses a fixed 5000 image ImageNet val subset (seed 0). Full CSVs in `a
 | 0.59 | 0.391 | 0.002 | 0.001 | 0.001 |
 | 0.30 | 0.059 | 0.001 | 0.001 | 0.001 |
 
-Magnitude baselines lose 5 to 10 percent of filters and collapse, the scale-symmetry failure the paper predicts. Exact and zero-bias kernels produce identical trajectories on these weights.
+The magnitude baselines fall to chance after removing 5 to 10 percent of filters, consistent with the scale symmetry failure described in the paper. Exact and zero-bias kernels produce identical trajectories on these weights.
 
 ### ViT-B/16 compression (GELU + LayerNorm)
 
@@ -64,7 +62,7 @@ Magnitude baselines lose 5 to 10 percent of filters and collapse, the scale-symm
 | 0.85 | 0.804 | 0.095 | 0.147 |
 | 0.80 | 0.632 | 0.045 | 0.034 |
 
-Compresses the MLP hidden units, about two thirds of parameters. The extension contributes a closed-form GELU self-kernel (Stein identities plus Owen's T), quadrature cross-kernels, and a 2D coefficient search replacing the paper's eq (15) scale split, which requires positive homogeneity that GELU lacks.
+Compression acts on the MLP hidden units, about two thirds of the parameters. The extension derives a closed-form GELU self-kernel, reduces the exact cross-kernel to a one dimensional integral, and replaces the eq (15) scale split with a 2D coefficient search, since that split requires positive homogeneity and GELU is not positively homogeneous.
 
 ### DEFT transfer (ImageNet source, 3 epochs)
 
@@ -77,7 +75,7 @@ Best H-Score, the harmonic mean of target accuracy and source retention:
 | full FT | 0.727 (0.862 / 0.629) | 0.518 (0.946 / 0.357) |
 | DEFT P=40 | 0.487 (0.869 / 0.338) | 0.498 (0.945 / 0.338) |
 
-DEFT trains only the low-capacity slack plus a new head. On the hard target it matches full fine-tuning's accuracy while full FT destroys its source knowledge. The slack fraction P trades plasticity against retention; P=20 wins both settings.
+DEFT trains only the low capacity slack and a new head. On SVHN it matches the target accuracy of full fine-tuning while retaining 0.774 source accuracy against 0.357. The slack fraction P trades plasticity against retention; P=20 gives the highest H-Score on both targets.
 
 ## Layout
 
@@ -107,11 +105,11 @@ Kernels are gated against 40M sample Monte Carlo at 0.1 percent; parent deployme
 
 ## Notes and limitations
 
-- The Gaussian surrogate has real error on real activations: median 18.5 percent per channel on ResNet-50 (Test D). The method works because rankings, not absolute values, drive decisions.
-- The zero-bias cross-kernel degrades with bias (7 percent normalized error at |beta/gamma| 0.25, 48 percent at 1.5). ViT and Whisper units are far more biased than ResNet's, so the scan is a heuristic there; executed merges are always repriced with exact kernels.
+- The Gaussian surrogate carries measurable error on real activations: median 18.5 percent per channel on ResNet-50 (Test D). Decisions depend on cost rankings rather than absolute values.
+- The zero-bias cross-kernel degrades with bias: 7 percent normalized error at |beta/gamma| 0.25, 48 percent at 1.5. ViT units are substantially more biased than ResNet filters, so candidate ranking there is approximate; every executed merge is repriced with exact kernels.
 - Block eviction is unsound on pre-norm transformers and off by default for ViT: one eviction collapsed accuracy from 0.80 to 0.03, and the static footprint of App B.2 overprices eviction of already thinned blocks.
 - All 2310 ViT merges satisfied the Lemma C.3 capacity bound; merges are rare on ResNet-50 (1 in 686 actions).
-- DEFT numbers are single seed and P was selected after observing P=40; a multi-seed grid is the natural hardening step.
+- DEFT numbers are single seed, and P was selected after observing the P=40 result. A multi-seed grid has not been run.
 - DEFT's structural mask is a no-op on ViT (no direct slack-to-core weights across blocks); protection comes from exact freezing, and the shared fc2 bias must stay frozen or target drift leaks into the source path.
 
 ## Extending
