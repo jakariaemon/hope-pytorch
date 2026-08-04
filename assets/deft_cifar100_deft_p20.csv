@@ -1,0 +1,4 @@
+method,target,epoch,target_acc,source_acc,h_score,train_seconds
+deft,cifar100,1,0.829,0.7736,0.8003,885.6
+deft,cifar100,2,0.8512,0.7736,0.8105,882.8
+deft,cifar100,3,0.861,0.7736,0.815,882.2

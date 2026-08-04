@@ -136,8 +136,8 @@ ImageNet source, two targets, 3 epochs, no source data during adaptation. Best H
 
 | method | CIFAR-100 target | SVHN target |
 |---|---|---|
-| DEFT P=20 | not run | **0.848** (0.939 / 0.774) |
-| head only | **0.809** (0.795 / 0.823) | 0.654 (0.542 / 0.823) |
+| DEFT P=20 | **0.815** (0.861 / 0.774) | **0.848** (0.939 / 0.774) |
+| head only | 0.809 (0.795 / 0.823) | 0.654 (0.542 / 0.823) |
 | full FT | 0.727 (0.862 / 0.629) | 0.518 (0.946 / 0.357, decays each epoch) |
 | DEFT P=40 | 0.487 (0.869 / 0.338) | 0.498 (0.945 / 0.338) |
 
@@ -145,7 +145,7 @@ Findings:
 
 - Theorem H.2 holds bitwise on the real model: after fine-tuning, every core fc1 row and fc2 column is identical to the source weights, and the measured source path is constant to four decimals across every epoch and both targets.
 - The shared fc2 bias is a stream parameter, not a per-unit weight; training it leaks target drift into the source path. It stays frozen, mirroring the paper's own bias handling (App G.2).
-- The stability-plasticity dilemma decides the winner. On the easy target (CIFAR-100) frozen features suffice and head only wins. On the hard target (SVHN) linear probing collapses and full FT forgets catastrophically; DEFT at P=20 matches full FT's target accuracy while retaining 0.774 source, taking first place by a wide margin.
+- DEFT at P=20 takes first place on both targets: a narrow edge over head only on the easy transfer (0.815 vs 0.809, within single-seed noise) and a wide margin on the hard one, where linear probing collapses and full FT forgets catastrophically. The masked source path is identical across targets by construction, measured at 0.7736 in every epoch of both runs.
 - The slack fraction P is a retention dial: masking 41 percent of units caps retention at 0.338, masking 21 percent keeps 0.774 at almost no target cost.
 
 ## Scope and extending
