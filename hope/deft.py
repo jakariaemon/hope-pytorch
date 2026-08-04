@@ -62,13 +62,18 @@ def partition_vit(model, calib_stats, percentile, merge_rho=0.9, kernel_mode="ze
 
 
 def configure_trainable(model, elasticity, head):
-    """Freeze everything except MLP fc1/fc2 (gated per unit at gradient time) and the new head."""
+    """Freeze everything except MLP fc1/fc2 (gated per unit at gradient time) and the new head.
+
+    fc2.bias stays frozen: it is a shared stream parameter, not a per-unit weight, so training
+    it would leak target drift into the masked source path.
+    """
     for p in model.parameters():
         p.requires_grad = False
     for block in model.encoder.layers:
         for m in (block.mlp[0], block.mlp[3]):
             for p in m.parameters():
                 p.requires_grad = True
+        block.mlp[3].bias.requires_grad = False
     for p in head.parameters():
         p.requires_grad = True
 

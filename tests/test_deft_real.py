@@ -44,7 +44,11 @@ class TestTheoremH2:
         model, elasticity, _ = setup
         snap = {}
         for g, block in enumerate(model.encoder.layers):
-            snap[g] = (block.mlp[0].weight.detach().clone(), block.mlp[3].weight.detach().clone())
+            snap[g] = (
+                block.mlp[0].weight.detach().clone(),
+                block.mlp[3].weight.detach().clone(),
+                block.mlp[3].bias.detach().clone(),
+            )
         attn_snap = model.encoder.layers[0].self_attention.in_proj_weight.detach().clone()
 
         target_head = nn.Sequential(nn.Linear(768, 100))
@@ -79,6 +83,7 @@ class TestTheoremH2:
             fc1, fc2 = block.mlp[0].weight.detach(), block.mlp[3].weight.detach()
             assert torch.equal(fc1[core], snap[g][0][core])
             assert torch.equal(fc2[:, core], snap[g][1][:, core])
+            assert torch.equal(block.mlp[3].bias.detach(), snap[g][2])
             slack = elasticity[g]
             changed += int(not torch.equal(fc1[slack], snap[g][0][slack]))
         assert changed >= 10
