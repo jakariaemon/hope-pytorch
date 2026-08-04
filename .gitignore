@@ -30,3 +30,4 @@ runs/
 !assets/*.csv
 *_plan.md
 *_PLAN.md
+!assets/vit_curve.png

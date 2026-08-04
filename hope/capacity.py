@@ -13,7 +13,9 @@ def capacity(w_out, k_ii):
 
 def layer_capacities(surrogate):
     """Per-neuron capacities and self-kernels for a LayerSurrogate."""
-    k_ii = self_kernel(surrogate.gamma, surrogate.beta)
+    from .activations import get_kernels
+
+    k_ii = get_kernels(surrogate.activation).self_kernel(surrogate.gamma, surrogate.beta)
     return capacity(surrogate.w_out, k_ii), k_ii
 
 

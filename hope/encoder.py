@@ -55,6 +55,7 @@ class Encoder:
         self.history = []
         self.audit_reports = []
         self._step = 0
+        self._layer_best = {}
 
     @property
     def n_live(self):
@@ -64,25 +65,34 @@ class Encoder:
     def density(self):
         return self.n_live / self.total_init
 
-    def best_action(self):
-        """Alg 1 greedy scan: O(1) cost queries against live residual capacities."""
+    def _best_granular(self, li):
+        """Best prune or merge inside one layer; costs depend only on that layer's state."""
+        cache = self.caches[li]
         best = None
-        for li, cache in enumerate(self.caches):
-            if cache.n_live > 1:
-                act, costs = cache.prune_costs()
+        if cache.n_live > 1:
+            act, costs = cache.prune_costs()
+            k = int(np.argmin(costs))
+            best = Action("prune", layer=li, i=int(act[k]), j_cost=float(costs[k]), dp=self.dp_prune[li])
+        if cache.n_live >= 2:
+            ii, jj, costs, _ = cache.merge_costs()
+            if len(costs):
                 k = int(np.argmin(costs))
-                cand = Action("prune", layer=li, i=int(act[k]), j_cost=float(costs[k]), dp=self.dp_prune[li])
+                cand = Action(
+                    "merge", layer=li, i=int(ii[k]), j=int(jj[k]), j_cost=float(costs[k]), dp=self.dp_prune[li]
+                )
                 if best is None or cand.dr < best.dr:
                     best = cand
-            if cache.n_live >= 2:
-                ii, jj, costs, _ = cache.merge_costs()
-                if len(costs):
-                    k = int(np.argmin(costs))
-                    cand = Action(
-                        "merge", layer=li, i=int(ii[k]), j=int(jj[k]), j_cost=float(costs[k]), dp=self.dp_prune[li]
-                    )
-                    if best is None or cand.dr < best.dr:
-                        best = cand
+        return best
+
+    def best_action(self):
+        """Alg 1 greedy scan with per-layer memoization; only acted-on layers recompute."""
+        best = None
+        for li in range(len(self.caches)):
+            if li not in self._layer_best:
+                self._layer_best[li] = self._best_granular(li)
+            cand = self._layer_best[li]
+            if cand is not None and (best is None or cand.dr < best.dr):
+                best = cand
         for bi, block in enumerate(self.blocks):
             if block.evicted:
                 continue
@@ -103,6 +113,7 @@ class Encoder:
             if self.executor is not None:
                 self.executor.prune(action.layer, action.i)
             cache.apply_prune(action.i)
+            self._layer_best.pop(action.layer, None)
         elif action.kind == "merge":
             cache = self.caches[action.layer]
             parent = cache.synthesize(action.i, action.j)
@@ -111,12 +122,14 @@ class Encoder:
             if self.executor is not None:
                 self.executor.merge(action.layer, action.i, action.j, parent)
             cache.apply_merge(action.i, action.j, parent)
+            self._layer_best.pop(action.layer, None)
         else:
             block = self.blocks[action.block]
             if self.executor is not None:
                 self.executor.evict(action.block)
             for l in block.layers:
                 self.caches[l].clear()
+                self._layer_best.pop(l, None)
             block.evicted = True
         self._step += 1
         self.history.append(

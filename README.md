@@ -95,6 +95,35 @@ The approximation is exact at zero bias and as correlation approaches 1, which i
 
 **Encoding ResNet-50 to density 0.3**: 686 actions, 678 prunes, 7 block evictions, 1 merge. Block eviction dominates early because its static parameter yield is large relative to its distortion under the DR criterion (eq 23).
 
+## GELU and LayerNorm: pretrained ViT-B/16
+
+This branch extends HOPE beyond the paper's PH-1 activations: closed-form GELU self-kernel via Stein identities and Owen's T, quadrature cross-kernels, and a 2D coefficient search replacing the eq (15) scale split, which relies on positive homogeneity that GELU lacks. LayerNorm models use a one-time calibration pass (App E): 512 unlabeled images recover per-unit statistics, then compression runs on weights alone.
+
+```bash
+python scripts/calibrate_vit.py --data /path/to/imagenet/val --out vit_calib.npz
+python scripts/run_compress_vit.py --data /path/to/imagenet/val --calib vit_calib.npz
+```
+
+![vit accuracy vs density](assets/vit_curve.png)
+
+Results on torchvision `IMAGENET1K_V1` ViT-B/16, compressing the MLP hidden units (about two thirds of parameters), fixed 5000 image subset, no fine-tuning:
+
+| density | HOPE | L1 in | L1 joint |
+|---|---|---|---|
+| 1.00 | 0.823 | 0.823 | 0.823 |
+| 0.95 | 0.819 | 0.158 | 0.823 |
+| 0.90 | 0.806 | 0.244 | 0.226 |
+| 0.85 | 0.804 | 0.095 | 0.147 |
+| 0.80 | 0.632 | 0.045 | 0.034 |
+| 0.70 | 0.271 | 0.003 | 0.004 |
+
+Findings:
+
+- Calibrated ViT pre-GELU units are heavily biased (|mu/sigma| median 1.7 to 2.9 per block), so the zero-bias scan is a rough ranking heuristic here; synthesis always reprices with exact kernels before deploying a merge.
+- MLP block eviction is off by default (`evictable=False`). A mature pre-norm ViT is not identity robust: a single eviction at density 0.85 collapsed accuracy from 0.80 to 0.03, traced action by action. The static footprint of App B.2 also overprices eviction of an already thinned block, which is what selected it.
+- 2310 merges executed with zero Lemma C.3 violations (rho median 0.69).
+- At density 0.85 the model retains 0.804 of its 0.823 baseline, a better retention ratio than the BN ResNet-50 reproduction at the same density. The curve declines smoothly below 0.80 as the redundancy budget runs out.
+
 ## Scope and extending
 
 The core (`hope/`) is architecture agnostic: it operates on per-neuron effective weights, BN parameters, and outgoing weight vectors. Only the adapter is model specific; the included one covers torchvision bottleneck ResNets (resnet50, resnet101, resnet152). A new architecture needs a `LayerSurrogate` per compressible layer, static parameter footprints, and an executor with `prune`, `merge`, and `evict`. Networks without BN can use `surrogate.calibrated_params` after a one-time statistics pass (App E). Natural next targets: VGG-style nets with the non-residual eviction rule (App F.3), BasicBlock ResNets, and Transformer MLP blocks.
