@@ -119,17 +119,21 @@ def main():
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     rows, best = [], -1.0
 
+    steps_total = len(train_loader)
     for epoch in range(1, args.epochs + 1):
         model.train()
         t0 = time.time()
-        for x, y in train_loader:
+        for step, (x, y) in enumerate(train_loader, 1):
             opt.zero_grad(set_to_none=True)
             loss = loss_fn(model(x.to(device)), y.to(device))
             loss.backward()
             if args.method == "deft":
                 gate_gradients(model, elasticity)
             opt.step()
+            if step % 100 == 0 or step == steps_total:
+                print(f"epoch {epoch} step {step}/{steps_total} loss {loss.item():.3f}", flush=True)
         train_s = time.time() - t0
+        print(f"epoch {epoch} evaluating", flush=True)
 
         acc_tgt = evaluate(model, val_loader, device)
         model.heads = source_head.to(device)
