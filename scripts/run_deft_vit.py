@@ -18,7 +18,7 @@ from hope.deft import configure_trainable, gate_gradients, mask_slack_drift, par
 from hope.device import auto_device
 
 
-def target_loaders(root, batch_size):
+def target_loaders(root, name, batch_size):
     from torch.utils.data import DataLoader, Subset
     from torchvision import datasets, transforms
 
@@ -29,13 +29,20 @@ def target_loaders(root, batch_size):
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
         ]
     )
-    train = datasets.CIFAR100(root, train=True, download=True, transform=tf)
+    if name == "cifar100":
+        train = datasets.CIFAR100(root, train=True, download=True, transform=tf)
+        n_classes = 100
+    else:
+        train = datasets.SVHN(root, split="train", download=True, transform=tf)
+        n_classes = 10
+    n_val = 5000
     idx = np.random.default_rng(0).permutation(len(train))
-    tr = Subset(train, idx[:45000].tolist())
-    va = Subset(train, idx[45000:].tolist())
+    tr = Subset(train, idx[: len(train) - n_val].tolist())
+    va = Subset(train, idx[len(train) - n_val :].tolist())
     return (
         DataLoader(tr, batch_size=batch_size, shuffle=True, num_workers=4, drop_last=True),
         DataLoader(va, batch_size=256, num_workers=4),
+        n_classes,
     )
 
 
@@ -69,6 +76,7 @@ def main():
     ap.add_argument("--batch-size", type=int, default=64)
     ap.add_argument("--calib", required=True)
     ap.add_argument("--imagenet", required=True)
+    ap.add_argument("--target", default="cifar100", choices=["cifar100", "svhn"])
     ap.add_argument("--target-data", default="data")
     ap.add_argument("--device", default="auto")
     ap.add_argument("--out", default=None)
@@ -94,7 +102,8 @@ def main():
             flush=True,
         )
 
-    target_head = nn.Sequential(nn.Linear(768, 100))
+    train_loader, val_loader, n_classes = target_loaders(args.target_data, args.target, args.batch_size)
+    target_head = nn.Sequential(nn.Linear(768, n_classes))
     model.heads = target_head
     model.to(device)
 
@@ -109,13 +118,12 @@ def main():
         for p in model.parameters():
             p.requires_grad = True
 
-    train_loader, val_loader = target_loaders(args.target_data, args.batch_size)
     src_loader = source_loader(args.imagenet, weights.transforms())
     params = [p for p in model.parameters() if p.requires_grad]
     opt = torch.optim.SGD(params, lr=args.lr, momentum=0.9)
     loss_fn = nn.CrossEntropyLoss()
 
-    out_path = args.out or f"results/deft_{args.method}.csv"
+    out_path = args.out or f"results/deft_{args.target}_{args.method}.csv"
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     rows, best = [], -1.0
 
@@ -148,6 +156,7 @@ def main():
         rows.append(
             {
                 "method": args.method,
+                "target": args.target,
                 "epoch": epoch,
                 "target_acc": round(acc_tgt, 4),
                 "source_acc": round(acc_src, 4),
