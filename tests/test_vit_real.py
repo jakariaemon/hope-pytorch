@@ -29,10 +29,10 @@ def vit():
     return vit_b_16(weights=ViT_B_16_Weights.IMAGENET1K_V1).eval()
 
 
-def build(model, stats, mode="zero_bias", check=True):
+def build(model, stats, mode="zero_bias", check=True, evictable=False):
     from hope.adapters.vit import build_vit_encoder
 
-    return build_vit_encoder(model, stats, kernel_mode=mode, check_forward=check)
+    return build_vit_encoder(model, stats, kernel_mode=mode, check_forward=check, evictable=evictable)
 
 
 class TestRealCalibration:
@@ -106,9 +106,10 @@ class TestRealExecution:
         assert agree >= 0.9
 
     def test_evict_one_block(self, vit, stats):
+        # eviction machinery works, but collapses accuracy on ViT, hence evictable=False by default
         from hope.encoder import Action
 
-        enc = build(vit, stats, check=True)
+        enc = build(vit, stats, check=True, evictable=True)
         enc.best_action = lambda: Action("evict", block=3, j_cost=1.0, dp=enc.blocks[3].dp)
         enc.step()
         assert enc.blocks[3].evicted

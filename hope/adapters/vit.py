@@ -85,8 +85,14 @@ class VitExecutor:
         self._check()
 
 
-def build_vit_encoder(model, calib_stats, kernel_mode="zero_bias", audit=False, check_forward=True, image_size=224):
-    """HOPE encoder over the MLP hidden units of every encoder block."""
+def build_vit_encoder(
+    model, calib_stats, kernel_mode="zero_bias", audit=False, check_forward=True, image_size=224, evictable=False
+):
+    """HOPE encoder over the MLP hidden units of every encoder block.
+
+    Eviction is off by default: mature pre-norm ViTs are not identity-robust, so removing
+    a whole MLP collapses the network, unlike the ResNet blocks of paper Sec 8.
+    """
     model = model.eval()
     groups = []
     for idx, block in enumerate(model.encoder.layers):
@@ -101,11 +107,12 @@ def build_vit_encoder(model, calib_stats, kernel_mode="zero_bias", audit=False, 
         )
         d_model = group.fc1.in_features
         dp_prune.append(2 * d_model + 1)
-        ln_params = 2 * d_model
-        dp_evict = group.fc1.weight.numel() + group.fc1.bias.numel() + ln_params
-        blocks.append(
-            BlockInfo(layers=[g], e_identity=float(np.sum(stats["stream_rms"])), dp=dp_evict)
-        )
+        if evictable:
+            ln_params = 2 * d_model
+            dp_evict = group.fc1.weight.numel() + group.fc1.bias.numel() + ln_params
+            blocks.append(
+                BlockInfo(layers=[g], e_identity=float(np.sum(stats["stream_rms"])), dp=dp_evict)
+            )
 
     executor = VitExecutor(model, groups, image_size=image_size, check_forward=check_forward)
     return Encoder(caches, dp_prune, blocks=blocks, executor=executor, audit=audit)
