@@ -55,12 +55,12 @@ The magnitude baselines fall to chance after removing 5 to 10 percent of filters
 
 ![vit accuracy vs density](assets/vit_curve.png)
 
-| density | HOPE | L1 in | L1 joint |
-|---|---|---|---|
-| 1.00 | 0.823 | 0.823 | 0.823 |
-| 0.90 | 0.806 | 0.244 | 0.226 |
-| 0.85 | 0.804 | 0.095 | 0.147 |
-| 0.80 | 0.632 | 0.045 | 0.034 |
+| density | HOPE | HOPE exact | L1 in | L1 joint |
+|---|---|---|---|---|
+| 1.00 | 0.823 | 0.823 | 0.823 | 0.823 |
+| 0.90 | 0.806 | 0.817 | 0.244 | 0.226 |
+| 0.85 | 0.804 | 0.783 | 0.095 | 0.147 |
+| 0.80 | 0.632 | 0.606 | 0.045 | 0.034 |
 
 Compression acts on the MLP hidden units, about two thirds of the parameters. The extension derives a closed-form GELU self-kernel, reduces the exact cross-kernel to a one dimensional integral, and replaces the eq (15) scale split with a 2D coefficient search, since that split requires positive homogeneity and GELU is not positively homogeneous.
 
@@ -106,7 +106,7 @@ Kernels are gated against 40M sample Monte Carlo at 0.1 percent; parent deployme
 ## Notes and limitations
 
 - The Gaussian surrogate carries measurable error on real activations: median 18.5 percent per channel on ResNet-50 (Test D). Decisions depend on cost rankings rather than absolute values.
-- The zero-bias cross-kernel degrades with bias: 7 percent normalized error at |beta/gamma| 0.25, 48 percent at 1.5. ViT units are substantially more biased than ResNet filters, so candidate ranking there is approximate; every executed merge is repriced with exact kernels.
+- The zero-bias cross-kernel degrades with bias: 7 percent normalized error at |beta/gamma| 0.25, 48 percent at 1.5. ViT units are substantially more biased than ResNet filters. A full exact-kernel sweep on ViT produced a different but comparable trajectory (crossing within 2 points in the usable region), so scan precision is not what limits the compression floor; every executed merge is repriced with exact kernels in both modes.
 - Block eviction is unsound on pre-norm transformers and off by default for ViT: one eviction collapsed accuracy from 0.80 to 0.03, and the static footprint of App B.2 overprices eviction of already thinned blocks.
 - All 2310 ViT merges satisfied the Lemma C.3 capacity bound; merges are rare on ResNet-50 (1 in 686 actions).
 - DEFT numbers are single seed, and P was selected after observing the P=40 result. A multi-seed grid has not been run.

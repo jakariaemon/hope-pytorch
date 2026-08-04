@@ -44,11 +44,12 @@ def gelu_self_kernel_quad(gamma, beta):
 
 
 def gelu_mean(gamma, beta):
-    """E[gelu(y)] via Gauss-Hermite."""
-    gamma = np.atleast_1d(np.asarray(gamma, dtype=np.float64))
-    beta = np.atleast_1d(np.asarray(beta, dtype=np.float64))
-    y = beta[..., None] + np.abs(gamma)[..., None] * np.sqrt(2.0) * _gh_x
-    return np.squeeze(gelu(y) @ _gh_w / np.sqrt(np.pi))
+    """Closed form E[gelu(y)] = E[y Phi(y)] for y ~ N(beta, gamma^2), by Stein's identity."""
+    beta = np.asarray(beta, dtype=np.float64)
+    s2 = np.asarray(gamma, dtype=np.float64) ** 2
+    root = np.sqrt(1.0 + s2)
+    c = beta / root
+    return beta * ndtr(c) + s2 * _phi(c) / root
 
 
 def gelu_cross_kernel_exact(gamma_i, beta_i, gamma_j, beta_j, rho_hat):
@@ -63,19 +64,17 @@ def gelu_cross_kernel_exact(gamma_i, beta_i, gamma_j, beta_j, rho_hat):
     shape = r.shape
     gi, gj, bi, bj, r = (a.ravel() for a in (gi, gj, bi, bj, r))
 
+    # 1D reduction: the inner expectation over the second neuron is closed form
     x = np.sqrt(2.0) * _gh_x
     out = np.empty(r.size)
-    for lo in range(0, r.size, 8192):
-        hi = lo + 8192
+    for lo in range(0, r.size, 65536):
+        hi = lo + 65536
         rc = np.clip(r[lo:hi], -DEGENERATE_RHO, DEGENERATE_RHO)
-        root = np.sqrt(1.0 - rc * rc)
         y1 = bi[lo:hi, None] + gi[lo:hi, None] * x
-        g1 = gelu(y1) * _gh_w
-        z2 = rc[:, None, None] * x[:, None] + root[:, None, None] * x[None, :]
-        y2 = bj[lo:hi, None, None] + gj[lo:hi, None, None] * z2
-        inner = gelu(y2) @ _gh_w
-        main = np.einsum("pi,pi->p", g1, inner) / np.pi
-
+        s_in = (gj[lo:hi] * np.sqrt(1.0 - rc * rc))[:, None]
+        m_in = bj[lo:hi, None] + (gj[lo:hi] * rc)[:, None] * x
+        inner = gelu_mean(s_in, m_in)
+        main = (gelu(y1) * inner) @ _gh_w / np.sqrt(np.pi)
         z_col = bj[lo:hi, None] + gj[lo:hi, None] * np.sign(r[lo:hi])[:, None] * x
         coll = (gelu(y1) * gelu(z_col)) @ _gh_w / np.sqrt(np.pi)
         out[lo:hi] = np.where(np.abs(r[lo:hi]) >= DEGENERATE_RHO, coll, main)

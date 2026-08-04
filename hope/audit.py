@@ -41,7 +41,7 @@ def audit_merge_path(cache, i, j, parent, steps=20):
     tol = 1e-9 * max(e_terminal, 1.0)
     margins = e_path - e_terminal
     return {
-        "rho_ij": float(cache.rho_hat[i, j]),
+        "rho_ij": float(cache.pair_rho(i, j)),
         "violations": int(np.sum(margins < -tol)),
         "min_margin": float(margins.min()),
         "steps": steps,
